@@ -5,6 +5,8 @@ classdef BoltGroup
         y
         Rult
         Dmax = 0.34;
+        
+        fsolve_Display = 'off';
     end
     
     methods
@@ -58,15 +60,13 @@ classdef BoltGroup
             theta = deg2rad(270-theta);
             
             options = struct;
-            options.Algorithm = 'levenberg-marquardt';
-            % options.Display = 'iter-detailed';
-            options.Display = 'off';
+            options.Display = obj.fsolve_Display;
             
             [CGx,CGy] = obj.centroid();
             ICo = [CGx CGy];
             [IC,~,exitflag,output] = fsolve(@(IC)error_Pn_IC(obj,xP,yP,theta,IC),ICo,options);
             if exitflag <= 0
-                fprintf(output);
+                fprintf('%s\n',output.message);
                 error('Unable to determine the instantaneous center');
             end
             Pn = obj.P_IC(IC);
@@ -77,13 +77,13 @@ classdef BoltGroup
         function [Mn,IC] = Mn_IC(obj)
             options = struct;
             options.Algorithm = 'levenberg-marquardt';
-            options.Display = 'off';
+            options.Display = obj.fsolve_Display;
             
             [CGx,CGy] = obj.centroid();
             ICo = [CGx CGy];
             [IC,~,exitflag,output] = fsolve(@(IC)obj.P_IC(IC),ICo,options);
             if exitflag <= 0
-                fprintf(output);
+                fprintf('%s\n',output.message);
                 error('Unable to determine the instantaneous center');
             end
             Mn = abs(obj.M_IC(IC));
@@ -139,6 +139,6 @@ P = sum(r.*R)/e;
 % Sum forces
 errorx = sum(Rx)+P*cos(theta);
 errory = sum(Ry)+P*sin(theta);
-error = sqrt(errorx^2 + errory^2);
+error = [errorx errory];
 
 end
