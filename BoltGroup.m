@@ -6,6 +6,8 @@ classdef BoltGroup
         Rult
         Dmax = 0.34;
         
+        plot_force_scale = 1;
+        
         fsolve_Display = 'off';
     end
     
@@ -32,7 +34,7 @@ classdef BoltGroup
             [Rx,Ry] = obj.Bolt_Forces_IC(IC);
             M = sum(-Rx.*obj.y) + sum(Ry.*obj.x);
         end
-        function [Rx,Ry] = Bolt_Forces_IC(obj,IC)
+        function [Rx,Ry,results] = Bolt_Forces_IC(obj,IC)
             ICx = IC(1);
             ICy = IC(2);
             
@@ -51,6 +53,13 @@ classdef BoltGroup
             angle = atan2(ry,rx) + pi/2;
             Rx = cos(angle).*R;
             Ry = sin(angle).*R;
+            
+            % Extra output
+            if nargout > 2
+                results = struct;
+                results.angle   = angle;
+                results.lc      = nan(size(angle));
+            end
         end        
         
         function [Pn,IC] = Pn_IC(obj,xP,yP,theta)
@@ -106,7 +115,7 @@ classdef BoltGroup
                 [Rx,Ry] = obj.Bolt_Forces_IC(IC);
                 for i = 1:length(obj.x)
                     plot([IC(1) obj.x(i)],[IC(2) obj.y(i)],'--k')
-                    plot([0 Rx(i)]+obj.x(i),[0 Ry(i)]+obj.y(i),'-r')
+                    plot(obj.plot_force_scale*[0 Rx(i)]+obj.x(i),obj.plot_force_scale*[0 Ry(i)]+obj.y(i),'-r')
                 end
             end
         end
