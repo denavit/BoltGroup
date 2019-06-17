@@ -36,17 +36,22 @@ classdef BoltGroupWithTearout
             xc = mean(obj.x);
             yc = mean(obj.y);
         end
-        function P = P_IC(obj,IC)   
-            [Rx,Ry] = obj.Bolt_Forces_IC(IC);
-            P = sqrt(sum(Rx)^2 + sum(Ry)^2);
-        end
-        function M = M_IC(obj,IC)
-            [Rx,Ry] = obj.Bolt_Forces_IC(IC);
-            M = sum(-Rx.*obj.y) + sum(Ry.*obj.x);
-        end
-        function [Rx,Ry,results] = Bolt_Forces_IC(obj,IC)
+        function [Rx,Ry,results] = Bolt_Forces_IC(obj,IC,d)
+            % This function returns the force each of the bolts imparts 
+            % on the plate.
+            %
+            % Direction is the sign of the rotation of the plate with
+            % respect to the bolt group (counterclockwise positive).
+            %
+            
             ICx = IC(1);
             ICy = IC(2);
+            
+            % Check edges
+            assert(all(obj.x+obj.dh/2<obj.edge_right_x) ,'All bolts must be left of right edge');
+            assert(all(obj.x-obj.dh/2>obj.edge_left_x)  ,'All bolts must be right of left edge');
+            assert(all(obj.y-obj.dh/2>obj.edge_bottom_y),'All bolts must be above bottom edge');
+            assert(all(obj.y+obj.dh/2<obj.edge_top_y)   ,'All bolts must be below top edge');
             
             % Calculate r values
             rx = obj.x-ICx;
@@ -57,8 +62,7 @@ classdef BoltGroupWithTearout
             delta = obj.Dmax*(r/max(r));
             
             % Compute clear distance
-            angle = atan2(ry,rx) + pi/2;
-            rad2deg(angle);
+            angle = atan2(ry,rx) - sign(d)*pi/2;
             lc = inf(size(obj.x));
             for i = 1:length(obj.x)
                 % Check against right edge
@@ -122,48 +126,65 @@ classdef BoltGroupWithTearout
             end
         end        
         
-        function [Pn,IC] = Pn_IC(obj,xP,yP,theta)
+        function [Pn,IC,d] = Pn_IC(obj,xP,yP,theta)
             % theta input as degrees clockwise from y-axis
             
             % convert theta to radians counter-clockwise from x-axis
             theta = deg2rad(270-theta);
             
+            % Find instantaneous center
             options = struct;
             options.Display = obj.fsolve_Display;
             
             [CGx,CGy] = obj.centroid();
             ICo = [CGx CGy];
-            [IC,~,exitflag,output] = fsolve(@(IC)error_Pn_IC(obj,xP,yP,theta,IC),ICo,options);
+            [IC,~,exitflag,output] = fsolve(@(IC)error_Pn_IC(obj,IC,xP,yP,theta),ICo,options);
             if exitflag <= 0
-                fprintf('%s\n',output.message);
-                error('Unable to determine the instantaneous center');
+                ICo = [CGx-3 CGy];
+                [IC,~,exitflag,output] = fsolve(@(IC)error_Pn_IC(obj,IC,xP,yP,theta),ICo,options);
+                if exitflag <= 0
+                    fprintf('%s\n',output.message);
+                    error('Unable to determine the instantaneous center');
+                end
             end
-            Pn = obj.P_IC(IC);
+            
+            % Compute Pn from instantaneous center 
+            d = direction(IC,xP,yP,theta);
+            [Rx,Ry] = obj.Bolt_Forces_IC(IC,d);
+            Pn = sqrt(sum(Rx)^2 + sum(Ry)^2);
+            
+            % Output
             if nargout < 2
                 clear IC
             end
+            if nargout < 3
+                clear d
+            end
         end
-        function [Mn,IC] = Mn_IC(obj)
+        function [Mn,IC] = Mn_IC(obj,d)
+            
+            % Find instantaneous center
             options = struct;
-            options.Algorithm = 'levenberg-marquardt';
             options.Display = obj.fsolve_Display;
             
             [CGx,CGy] = obj.centroid();
             ICo = [CGx CGy];
-            [IC,~,exitflag,output] = fsolve(@(IC)obj.P_IC(IC),ICo,options);
+            [IC,~,exitflag,output] = fsolve(@(IC)error_Mn_IC(obj,IC,d),ICo,options);
             if exitflag <= 0
                 fprintf(output);
                 error('Unable to determine the instantaneous center');
             end
-            Mn = abs(obj.M_IC(IC));
+            
+            % Compute Mn from instantaneous center
+            [Rx,Ry] = obj.Bolt_Forces_IC(IC,d);
+            Mn = abs(sum(-Rx.*obj.y) + sum(Ry.*obj.x));
+            
+            % Output
             if nargout < 2
                 clear IC
-            end
+            end            
         end        
-        
-
-        
-        function plot(obj,IC)
+        function plot(obj,IC,xP,yP,theta)
             hold all
             scatter(obj.x,obj.y,'k')
             
@@ -171,8 +192,13 @@ classdef BoltGroupWithTearout
             scatter(xc,yc,'r')
             
             if nargin > 1
+                if nargin == 3
+                    d = xP;
+                else
+                    d = direction(IC,xP,yP,theta);
+                end                
                 scatter(IC(1),IC(2),'b')
-                [Rx,Ry] = obj.Bolt_Forces_IC(IC);
+                [Rx,Ry] = obj.Bolt_Forces_IC(IC,d);
                 for i = 1:length(obj.x)
                     plot([IC(1) obj.x(i)],[IC(2) obj.y(i)],'--k')
                     plot(obj.plot_force_scale*[0 Rx(i)]+obj.x(i),obj.plot_force_scale*[0 Ry(i)]+obj.y(i),'-r')
@@ -183,31 +209,30 @@ classdef BoltGroupWithTearout
     end
 end
 
+function d = direction(IC,xP,yP,theta)
+d = sign((xP-IC(1))*sin(theta) - (yP-IC(2))*cos(theta));
+end
 
-
-
-function error = error_Pn_IC(obj,xP,yP,theta,IC)   
-
+function error = error_Pn_IC(obj,IC,xP,yP,theta)   
 ICx = IC(1);
 ICy = IC(2);
-[Rx,Ry] = obj.Bolt_Forces_IC(IC);
-R = sqrt(Rx.^2+Ry.^2);
+d = direction(IC,xP,yP,theta);
+[Rx,Ry] = obj.Bolt_Forces_IC(IC,d);
 
 % Calculate r values
 rx = obj.x-ICx;
 ry = obj.y-ICy;
-r = sqrt(rx.^2 + ry.^2);
 
 % Sum Moments to solve for P
-a = sin(theta);
-b = -cos(theta);
-c = cos(theta)*yP-sin(theta)*xP;
-e = (a*ICx + b*ICy + c)/sqrt(a^2+b^2); % @todo - should this be pos, neg, or abs value????
-P = sum(r.*R)/e;
+P = sum(ry.*Rx - rx.*Ry)/((xP-IC(1))*sin(theta) - (yP-IC(2))*cos(theta));
 
 % Sum forces
 errorx = sum(Rx)+P*cos(theta);
 errory = sum(Ry)+P*sin(theta);
 error = [errorx errory];
+end
 
+function error = error_Mn_IC(obj,IC,d)
+[Rx,Ry] = obj.Bolt_Forces_IC(IC,d);
+error = [sum(Rx) sum(Ry)];
 end
