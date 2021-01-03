@@ -22,6 +22,7 @@ classdef SinglePlateShearConnection
         conventional_override                   = [];
         check_all_limit_states_for_conventional = false;
         bolt_strength_method_override           = [];
+        bolt_strength_override                  = [];
         use_tabulated_C                         = false;
         eccentricity_on_right_side              = true;
         bolt_hole_def_considered                = false;
@@ -196,7 +197,14 @@ classdef SinglePlateShearConnection
                         otherwise; error('Unknown thread condition: %s',obj.thread_cond);
                     end
                 otherwise
-                    error('Unknown thread conddition: %s',obj.thread_cond);
+                    error('Unknown thread condition: %s',obj.thread_cond);
+            end
+        end
+        function rn = FnvAb(obj)
+            if isempty(obj.bolt_strength_override)
+                rn = obj.Fnv*obj.Ab;
+            else
+                rn = obj.bolt_strength_override;
             end
         end
         function [controlling_R,controlling_limit_state,results] = R(obj,strength_type)
@@ -223,10 +231,10 @@ classdef SinglePlateShearConnection
                     % Bolt shear (as eccentric) 
                     if obj.use_tabulated_C
                         C   = C_from_table(obj.n);
-                        Rn  = obj.Fnv*obj.Ab*C;
+                        Rn  = obj.FnvAb*C;
                     else
                         [x,y] = obj.get_bolt_positions;
-                        Rult = obj.Fnv*obj.Ab;
+                        Rult = obj.FnvAb;
                         BG  = BoltGroup(x,y,Rult);
                         Rn  = BG.Pn_IC(obj.e,0,0);
                         % fRn/Rult; % this is C
@@ -271,10 +279,10 @@ classdef SinglePlateShearConnection
                     % Bolt shear, bearing, and tearout (as eccentric) 
                     [x,y] = obj.get_bolt_positions;
                     if obj.bolt_hole_def_considered
-                        Rult = min([obj.Fnv*obj.Ab 2.4*obj.d*obj.tp*obj.Fu]);
+                        Rult = min([obj.FnvAb 2.4*obj.d*obj.tp*obj.Fu]);
                         Rult_over_lc = 1.2*obj.tp*obj.Fu;
                     else
-                        Rult = min([obj.Fnv*obj.Ab 3.0*obj.d*obj.tp*obj.Fu]);
+                        Rult = min([obj.FnvAb 3.0*obj.d*obj.tp*obj.Fu]);
                         Rult_over_lc = 1.5*obj.tp*obj.Fu;
                     end
                     BG = BoltGroupWithTearout(x,y,Rult,Rult_over_lc,obj.dh);
@@ -297,9 +305,9 @@ classdef SinglePlateShearConnection
                 case 'Poison Bolt'
                     lc_min = min([obj.lev-0.5*obj.dh obj.leh-0.5*obj.dh obj.s-obj.dh obj.g-obj.dh]);
                     if obj.bolt_hole_def_considered
-                        Rult = min([obj.Fnv*obj.Ab 2.4*obj.d*obj.tp*obj.Fu 1.2*lc_min*obj.tp*obj.Fu]);
+                        Rult = min([obj.FnvAb 2.4*obj.d*obj.tp*obj.Fu 1.2*lc_min*obj.tp*obj.Fu]);
                     else
-                        Rult = min([obj.Fnv*obj.Ab 3.0*obj.d*obj.tp*obj.Fu 1.5*lc_min*obj.tp*obj.Fu]);
+                        Rult = min([obj.FnvAb 3.0*obj.d*obj.tp*obj.Fu 1.5*lc_min*obj.tp*obj.Fu]);
                     end
                     
                     if obj.use_tabulated_C
@@ -455,10 +463,10 @@ classdef SinglePlateShearConnection
             [x,y] = obj.get_bolt_positions; 
 
             if obj.bolt_hole_def_considered
-                Rult = min([obj.Fnv*obj.Ab 2.4*obj.d*obj.tp*obj.Fu]);
+                Rult = min([obj.FnvAb 2.4*obj.d*obj.tp*obj.Fu]);
                 Rult_over_lc = 1.2*obj.tp*obj.Fu;
             else
-                Rult = min([obj.Fnv*obj.Ab 3.0*obj.d*obj.tp*obj.Fu]);
+                Rult = min([obj.FnvAb 3.0*obj.d*obj.tp*obj.Fu]);
                 Rult_over_lc = 1.5*obj.tp*obj.Fu;
             end
             
