@@ -5,6 +5,9 @@ classdef BoltGroup
         y
         Rult
         Dmax = 0.34;
+        load_deformation_type = 'standard';
+        Rslip = 0;
+        Dslip = 0;
         
         plot_force_scale = 1;
         
@@ -41,11 +44,33 @@ classdef BoltGroup
             ry = obj.y-ICy;
             r = sqrt(rx.^2 + ry.^2);
             
-            % Compute delta
-            delta = obj.Dmax*(r/max(r));
-            
-            % Compute strengths of bolts
-            R = obj.Rult*(1-exp(-10*delta)).^0.55;
+            % Compute force in bolts
+            switch lower(obj.load_deformation_type)
+                case 'standard'
+                    delta = obj.Dmax*(r/max(r));
+                    R = obj.Rult*(1-exp(-10*delta)).^0.55;
+                case 'standard_with_slip'
+                    delta = (obj.Dmax+obj.Dslip)*(r/max(r));
+                    Dslip0 = -(1/10)*log(1-(obj.Rslip/obj.Rult)^(1/0.55));
+                    
+                    R = nan(size(delta));
+                    for i = 1:length(delta)
+                        if delta(i) <= Dslip0
+                            R(i) = obj.Rult*(1-exp(-10*delta(i))).^0.55;
+                        elseif delta(i) <= Dslip0 + obj.Dslip
+                            R(i) = obj.Rslip;
+                        else
+                            R(i) = obj.Rult*(1-exp(-10*(delta(i)-obj.Dslip))).^0.55;
+                        end
+                    end
+                case 'elastic'
+                    R = obj.Rult*(r/max(r));
+                case 'plastic'
+                    %R = obj.Rult;
+                    R = min(100*obj.Rult*(r/max(r)),obj.Rult);
+                otherwise
+                    error('Unknown load deformation type: %s',obj.load_deformation_type);
+            end
             
             % Component breakdown
             angle = atan2(ry,rx) - sign(d)*pi/2;
